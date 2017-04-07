@@ -1,30 +1,104 @@
 #!/usr/bin/ruby -w
-# encoding: UTF-8
+# encoding: utf-8
+
+# Save Markdown mail to org-mode file.
+#
+# Currently uses pandoc for conversion.
+# Could modify to use MM_BUNDLE_ITEM_NAME as decission as to what to do.
+# i.e. "Add with Summary..." does the conversion, while another phrase
+# would not - but then why wouldn't I?
 
 require 'cgi'
+time = Time.new
+
+# # Debug - list out environment variables
+# output = []
+# r, io = IO.pipe
+# fork do
+#      system("env", out: io, err: :out)
+# end
+# io.close
+# File.open(ENV['HOME'] + "/.tmp_mm_env", 'a') { |f|
+#   r.each_line{|l| f.puts l; output << l.chomp}
+# }
+
+tmpMdFile = ENV['HOME'] + "/.tmp_mm_org_mode.md"
+tmpOrgFile = ENV['HOME'] + "/.tmp_mm_org_mode.org"
+
+outputFile= `defaults read com.freron.MailMate MmOrgModeInbox`.chomp
+if outputFile.empty?
+  outputFile = ENV['HOME'] + '/Dropbox/notes/inbox.org'
+end
 
 subject = ENV['MM_SUBJECT']
-note = "Email: message://%3c" + ENV['MM_MESSAGE_ID'] + "%3e"
-
-range_string = ENV['MM_SELECTED_RANGE']
+id = ENV['MM_MESSAGE_ID']
 selection = ""
-if range_string.nil?
-  selection = $stdin.read
+
+# If no id or subject then this is likely a test run from shell.
+if id.nil? and subject.nil?
+  id = "__TEST__"
+  subject = "__TEST RUN__"
+  selection = "## TEST RUN\n\n- Nothing to see here!\n"
 else
-  canonical = $stdin.read
-  offset1,offset2 = range_string.match(/(\d+):(\d+)/).captures
-  range = Integer(offset1)..Integer(offset2)
-  selection = canonical[range]
+
+  range_string = ENV['MM_SELECTED_RANGE']
+  selection = ""
+  if range_string.nil?
+    selection = $stdin.read
+  else
+    canonical = $stdin.read
+    offset1,offset2 = range_string.match(/(\d+):(\d+)/).captures
+    range = Integer(offset1)..Integer(offset2)
+    selection = canonical[range]
+  end
 end
+
+note = "Email: message://%3c" + id + "%3e"
 
 if !selection.empty?
-  note = note + "\n\n" +  selection
+  # Selection available, append to note.
+
+  # Convert Markdown to org-mode using pandoc
+  # Write selection to temporary file.
+  File.open(tmpMdFile, "w") { |f| f.puts selection}
+  if system("/opt/local/bin/pandoc",
+            "-f","markdown", "-t","org", "-o", tmpOrgFile, tmpMdFile)
+  then
+    # Read org file in.
+    # ...Alternative might be to write the note in MD format...
+    selection = IO.read(tmpOrgFile)
+    # Append it to note, but make any headers, sub headers?
+    # ...Possibly already done by MailMate.
+    # convert blank links (images) to something not blank.
+    # ...should possibly be the last filename part of the link.
+    selection = selection.gsub(/\[\]\]/, '[🔗]]')
+    note = note + "\n\n" + selection #.gsub(/^\*/, '**')
+  else
+    # Error occurred, Fall back to just writing out in MD format,
+    # with error code from system.
+    # Quote stars at BOL with a coma to avoid createing sub-headings.
+    note = note + "\n\n# Pandoc Error:" + $? +
+           "\n\n" + selection.gsub(/^\*/, ',*')
+  end
 end
 
-File.open(ENV['HOME'] + '/Dropbox/notes/inbox.org', 'a') { |f|
-  f.puts "\n"
+File.open(outputFile, 'a') { |f|
   f.puts "* TODO " + subject + "  :mail:\n"
+  f.puts time.strftime("[%Y-%m-%d %a %H:%M]\n")
   f.puts note
   f.puts "\n"
-  
 }
+
+# An alternative to writing to a file would perhaps be to copy to selection
+# and run emacs -e '(make-capture-frame)'
+
+# Load file in emacs.
+# ...Not sure I like jumping to emacs from here...
+# The --no-wait might end up waiting if emacs is asking to revert the buffer (file).
+# --alternate editor is to try and start emacs if server is not already running, which could be slow.
+# system("/Applications/Emacs.app/Contents/MacOS/bin/emacsclient",
+#        "--no-wait", "--create-frame", "--alternate-editor=''", outputFile)
+
+if id == "__TEST__"
+  p "Wrote to " + outputFile
+end
