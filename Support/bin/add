@@ -2,8 +2,7 @@
 # encoding: utf-8
 
 # Save Markdown mail to org-mode file.
-#
-# Currently uses pandoc for conversion.
+
 # Could modify to use MM_BUNDLE_ITEM_NAME as decission as to what to do.
 # i.e. "Add with Summary..." does the conversion, while another phrase
 # would not - but then why wouldn't I?
@@ -57,29 +56,33 @@ note = "Email: message://%3c" + id + "%3e"
 
 if !selection.empty?
   # Selection available, append to note.
+  note = note + "\n\n#+BEGIN_VERSE\n" + selection.gsub(/^\*/, ',*') + "\n#+END_VERSE\n"
 
   # Convert Markdown to org-mode using pandoc
+  # Only it turns out that incoming mail is not converted to mark-down!
+  # So commented out.
+
   # Write selection to temporary file.
-  File.open(tmpMdFile, "w") { |f| f.puts selection}
-  if system("/opt/local/bin/pandoc",
-            "-f","markdown", "-t","org", "-o", tmpOrgFile, tmpMdFile)
-  then
-    # Read org file in.
-    # ...Alternative might be to write the note in MD format...
-    selection = IO.read(tmpOrgFile)
-    # Append it to note, but make any headers, sub headers?
-    # ...Possibly already done by MailMate.
-    # convert blank links (images) to something not blank.
-    # ...should possibly be the last filename part of the link.
-    selection = selection.gsub(/\[\]\]/, '[🔗]]')
-    note = note + "\n\n" + selection #.gsub(/^\*/, '**')
-  else
-    # Error occurred, Fall back to just writing out in MD format,
-    # with error code from system.
-    # Quote stars at BOL with a coma to avoid createing sub-headings.
-    note = note + "\n\n# Pandoc Error:" + $? +
-           "\n\n" + selection.gsub(/^\*/, ',*')
-  end
+  # File.open(tmpMdFile, "w") { |f| f.puts selection}
+  # if system("/opt/local/bin/pandoc",
+  #           "-f","markdown", "-t","org", "-o", tmpOrgFile, tmpMdFile)
+  # then
+  #   # Read org file in.
+  #   # ...Alternative might be to write the note in MD format...
+  #   selection = IO.read(tmpOrgFile)
+  #   # Append it to note, but make any headers, sub headers?
+  #   # ...Possibly already done by MailMate.
+  #   # convert blank links (images) to something not blank.
+  #   # ...should possibly be the last filename part of the link.
+  #   selection = selection.gsub(/\[\]\]/, '[🔗]]')
+  #   note = note + "\n\n" + selection #.gsub(/^\*/, '**')
+  # else
+  #   # Error occurred, Fall back to just writing out in MD format,
+  #   # with error code from system.
+  #   # Quote stars at BOL with a coma to avoid creating sub-headings.
+  #   note = note + "\n\n# Pandoc Error:" + $? +
+  #         "\n\n" + selection.gsub(/^\*/, ',*')
+  # end
 end
 
 File.open(outputFile, 'a') { |f|
